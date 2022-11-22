@@ -7,6 +7,7 @@ import os
 import re
 import json
 import time
+import random
 from datetime import datetime
 from typing import Union
 from datetime import timedelta
@@ -25,6 +26,7 @@ from passlib.apps import custom_app_context
 from jose import JWTError, jwt, ExpiredSignatureError
 import uvicorn
 from loguru import logger
+from faker import Faker
 
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -75,6 +77,8 @@ settings = Settings()
 数据操作
 ========
 """
+
+fake = Faker(locale="zh-CN")
 
 engine = create_engine(
     settings.sqlalchemy_database_url, connect_args={"check_same_thread": False}
@@ -155,10 +159,41 @@ class User(Base):
             return user
         return  # 密码验证失败
 
+class Article(Base):
+    __tablename__ = 'article'
+    id = Column(Integer, primary_key=True)
+    title = Column(String(128), comment='标题|内容')
+    status = Column(String(32), comment='状态')
+    author = Column(String(32), comment='作者')
+    display_time = Column(DateTime(), comment='创建时间')
+    pageviews = Column(String(128), comment='浏览次数')
 
 def create_table():
+    logger.info("重置数据库 ...")
+    Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
 
+    users = [('admin', '111111'), ('guest', '111111')]
+    logger.info(f"创建账号 {users} ...")
+    for username, password in users:
+        user = User(username=username, password=password)
+        db.add(user)
+    db.commit()
+    logger.info(f"创建随机文章 {10} ...")
+    items = []
+    for i in range(10):
+        items.append({
+        'id': fake.random_int(min=1, max=999),
+        'title': fake.text(),
+        'status': random.choice(['published', 'draft', 'deleted']),
+        'author': fake.name(),
+        'display_time': fake.date_time(),
+        'pageviews': fake.random_int(min=300, max=5000)
+    })
+    articles = [Article(**x) for x in items]
+    db.add_all(articles)
+    db.commit()
+    
 
 """
 ========
@@ -189,6 +224,10 @@ user_router = APIRouter(
     prefix='/user', 
     tags=['user'],
     # dependencies=[Depends(get_token_header)],  # 可以让每个api都会需要经过这个检查
+)
+table_router = APIRouter(
+    prefix='/table',
+    tags=['table'],
 )
 
 """
@@ -241,6 +280,10 @@ def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留
         'name': 'Super Admin'
     }
 
+@user_router.post('/logout')
+def logout(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
+    return f"success {user_id}"
+
 @user_router.post('/setpwd')
 def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     # 疑问,修改成功后如何让旧的jwt失效(用户重新登陆),再就是怎么实现强制登出
@@ -250,9 +293,14 @@ def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     db.refresh(user)
     return {'msg': "修改成功,请重新登陆"}
 
+@table_router.get('/list')
+def table_list():
+    items = db.query(Article).all()
+    return {'items': items}
 
 # 需要在定义api后,进行调用才会加入到app中
 app.include_router(user_router)
+app.include_router(table_router)
 
 if __name__ == '__main__':
     create_table()
