@@ -11,8 +11,7 @@ from datetime import datetime
 from typing import Union
 from datetime import timedelta
 
-
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, Header, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseSettings
@@ -54,6 +53,7 @@ class Settings(BaseSettings):
     # import secrets
     # secret_key: str = secrets.token_hex()
 
+    api_name: str = 'manage:app'
     api_host: str = '0.0.0.0'
     api_port: int = 8000
     log_level: str = 'debug'
@@ -110,19 +110,20 @@ class User(Base):
         return encoded_jwt
 
     @classmethod
-    def get_user(cls, token):
-        user_id = cls.get_user_id(token)
+    def get_user(cls, x_token: str = Header()):
+        """HTTP headers 是大小写不敏感的"""
+        user_id = cls.get_user_id(x_token)
         return db.query(cls).filter(cls.id == user_id).first()
 
     @classmethod
-    def get_user_id(cls, token):
+    def get_user_id(cls, x_token: str = Header()):
         credentials_exception = HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
         )
-        print(token)
+        print(x_token)
         try:
-            payload = jwt.decode(token, settings.secret_key,
+            payload = jwt.decode(x_token, settings.secret_key,
                                  algorithms=settings.secret_algorithm)
             print(payload)
             user_id: str = payload.get("sub")
@@ -184,6 +185,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+user_router = APIRouter(
+    prefix='/user', 
+    tags=['user'],
+    # dependencies=[Depends(get_token_header)],  # 可以让每个api都会需要经过这个检查
+)
+
 """
 错误处理
 """
@@ -197,8 +204,8 @@ app.add_middleware(
 """
 
 
-@app.post('/login')
-def login(username: str, password: str):
+@user_router.post('/login')
+def login(username: str = Body(), password: str = Body()):
     user = User.login(username, password)
 
     if not user:
@@ -208,10 +215,10 @@ def login(username: str, password: str):
         )
     else:
         access_token = user.create_access_token()
-        return {"access_token": access_token, "token_type": "bearer", "msg": '登陆成功'}
+        return {"token": access_token, "msg": '登陆成功'}
 
 
-@app.post('/register')
+@user_router.post('/register')
 def register(username: str, password: str):
     user = User(username=username)
     user.hash_password(password)
@@ -221,12 +228,20 @@ def register(username: str, password: str):
     return {'msg': "注册成功"}
 
 
-@app.post('/get_user_id')
+@user_router.post('/get_user_id')
 def get_user_id(user_id: str = Depends(User.get_user_id)):
     return user_id
 
+@user_router.get('/info')
+def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
+    return {
+        'roles': ['admin'],
+        'introduction': 'I am a super administrator',
+        'avatar': 'https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif',
+        'name': 'Super Admin'
+    }
 
-@app.post('/setpwd')
+@user_router.post('/setpwd')
 def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     # 疑问,修改成功后如何让旧的jwt失效(用户重新登陆),再就是怎么实现强制登出
     user.hash_password(new_password)
@@ -236,11 +251,14 @@ def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     return {'msg': "修改成功,请重新登陆"}
 
 
+# 需要在定义api后,进行调用才会加入到app中
+app.include_router(user_router)
+
 if __name__ == '__main__':
     create_table()
 
     uvicorn.run(
-        'manage:app',   # 需要使用字符串模块名才能reload
+        settings.api_name,   # 需要使用字符串模块名才能reload
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level,
