@@ -1,8 +1,7 @@
-fastapi
-uvicorn
-sqlalchemy
-python-jose
-passlib
+fastapi==0.85.1
+uvicorn==0.18.3
+SQLAlchemy==1.4.18
+python-jose==3.3.0
+passlib==1.7.1
 
-loguru
-faker
+Faker==15.0.0

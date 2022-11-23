@@ -11,6 +11,7 @@ import random
 from datetime import datetime
 from typing import Union
 from datetime import timedelta
+import logging
 
 from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, Header, Body
 from fastapi.responses import PlainTextResponse, JSONResponse
@@ -27,12 +28,11 @@ from sqlalchemy.orm import sessionmaker
 from passlib.apps import custom_app_context
 from jose import JWTError, jwt, ExpiredSignatureError
 import uvicorn
-from loguru import logger
 from faker import Faker
 
 
 basedir = os.path.abspath(os.path.dirname(__file__))
-
+logger = logging.getLogger("uvicorn.access")
 
 """
 配置相关
@@ -236,6 +236,14 @@ table_router = APIRouter(
     prefix='/table',
     tags=['table'],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """日志配置 参考 https://www.51cto.com/article/707542.html"""
+    logger = logging.getLogger("uvicorn.access")
+    handler = logging.handlers.RotatingFileHandler("log/api.log",mode="a",maxBytes = 5*1024*1024, backupCount = 3, encoding='utf-8')
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
 
 """
 错误处理
