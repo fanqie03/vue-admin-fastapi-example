@@ -37,7 +37,9 @@ python manage.py
 
 ## 重新构建
 
-### 构建前端
+### 手动构建
+
+> nodejs 14 可以
 
 在frontend目录下运行
 
@@ -50,6 +52,26 @@ npm run build:prod
 
 ```sh
 python manage.py
+```
+
+### 使用docker
+
+构建image
+
+```sh
+docker build -t vue-admin-fastapi-examples:0.1 -f docker/Dockerfile  .
+```
+
+运行image
+
+```sh
+docker run -it --rm -p 8000:8000 vue-admin-fastapi-examples:0.1
+```
+
+### 使用docker-compose
+
+```sh
+docker-compose -f docker/docker-compose.yaml up -d
 ```
 
 ## 项目预览

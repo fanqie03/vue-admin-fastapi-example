@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     api_name: str = 'manage:app'
     api_host: str = '0.0.0.0'
     api_port: int = 8000
+    api_reload: int = 1
     log_level: str = 'debug'
 
     class Config:  # 可以使用.env覆盖本地文件
@@ -182,7 +183,7 @@ def create_table():
     items = []
     for i in range(10):
         items.append({
-        'id': fake.random_int(min=1, max=999),
+        'id': fake.unique.random_int(min=1, max=999),  # 随机且唯一
         'title': fake.text(),
         'status': random.choice(['published', 'draft', 'deleted']),
         'author': fake.name(),
@@ -332,5 +333,5 @@ if __name__ == '__main__':
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level,
-        reload=True,
+        reload=settings.api_reload,
     )
