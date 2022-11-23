@@ -3,10 +3,12 @@ import { MessageBox, Message } from 'element-ui'
 import store from '@/store'
 import { getToken } from '@/utils/auth'
 
+console.log(process.env.VUE_APP_BASE_API)
+
 // create an axios instance
 const service = axios.create({
-  // baseURL: process.env.VUE_APP_BASE_API, // url = base url + request url
-  baseURL: 'http://localhost:8000', // url = base url + request url
+  baseURL: process.env.VUE_APP_BASE_API, // url = base url + request url
+  // baseURL: 'http://localhost:8000', // url = base url + request url
   // withCredentials: true, // send cookies when cross-domain requests
   timeout: 5000 // request timeout
 })
@@ -58,7 +60,6 @@ service.interceptors.response.use(
     //   })
     // }
     // return response
-  
 
     //   // 50008: Illegal token; 50012: Other clients logged in; 50014: Token expired;
     if (res.code === 50008 || res.code === 50012 || res.code === 50014) {
@@ -84,7 +85,7 @@ service.interceptors.response.use(
       })
       return Promise.reject(new Error(res.message || 'Error'))
     }
-    
+
     // } else {
     //   return res
     // }

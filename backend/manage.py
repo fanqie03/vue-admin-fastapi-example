@@ -16,6 +16,7 @@ from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, Header, 
 from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseSettings
 
 from sqlalchemy import create_engine
@@ -303,6 +304,13 @@ def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
 def table_list():
     items = db.query(Article).all()
     return {'items': items}
+
+@app.get('/')
+def index():  # 将首页重定向到admin后台
+    return RedirectResponse('/admin/index.html')
+
+
+app.mount("/admin", StaticFiles(directory="admin"), name="admin")
 
 # 需要在定义api后,进行调用才会加入到app中
 app.include_router(user_router)
