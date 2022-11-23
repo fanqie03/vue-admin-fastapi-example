@@ -50,7 +50,7 @@ class Settings(BaseSettings):
         os.path.join(basedir, 'data.sqlite')
     # sqlalchemy_database_url: str = "postgresql://user:password@postgresserver/db"
     #
-    expire_minite: float = 0.1  # jwt超时时间
+    expire_minite: float = 10  # jwt超时时间
     secret_algorithm: str = 'HS256'  # jwt 加密算法
     # 加密密钥
     secret_key: str = '123456'
@@ -67,7 +67,6 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-# print(settings)
 
 """
 配置相关
@@ -127,18 +126,15 @@ class User(Base):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials"
         )
-        print(x_token)
         try:
             payload = jwt.decode(x_token, settings.secret_key,
                                  algorithms=settings.secret_algorithm)
-            print(payload)
             user_id: str = payload.get("sub")
             if user_id is None:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="找不到user_id"
                 )
-            print(type(payload.get('exp')))
             if payload.get('exp') - time.time() <= 0:  # 超时
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,  # 重新登陆
@@ -236,6 +232,9 @@ table_router = APIRouter(
     prefix='/table',
     tags=['table'],
 )
+api_router = APIRouter(
+    prefix='/api',
+)
 
 @app.on_event("startup")
 async def startup_event():
@@ -321,8 +320,9 @@ def index():  # 将首页重定向到admin后台
 app.mount("/admin", StaticFiles(directory="admin"), name="admin")
 
 # 需要在定义api后,进行调用才会加入到app中
-app.include_router(user_router)
-app.include_router(table_router)
+api_router.include_router(user_router)
+api_router.include_router(table_router)
+app.include_router(api_router)
 
 if __name__ == '__main__':
     create_table()
