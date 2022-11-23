@@ -13,6 +13,7 @@ from typing import Union
 from datetime import timedelta
 
 from fastapi import Depends, FastAPI, HTTPException, status, APIRouter, Header, Body
+from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseSettings
@@ -48,7 +49,7 @@ class Settings(BaseSettings):
         os.path.join(basedir, 'data.sqlite')
     # sqlalchemy_database_url: str = "postgresql://user:password@postgresserver/db"
     #
-    expire_minite: int = 30  # jwt超时时间
+    expire_minite: float = 0.1  # jwt超时时间
     secret_algorithm: str = 'HS256'  # jwt 加密算法
     # 加密密钥
     secret_key: str = '123456'
@@ -176,7 +177,8 @@ def create_table():
     users = [('admin', '111111'), ('guest', '111111')]
     logger.info(f"创建账号 {users} ...")
     for username, password in users:
-        user = User(username=username, password=password)
+        user = User(username=username)
+        user.hash_password(password)
         db.add(user)
     db.commit()
     logger.info(f"创建随机文章 {10} ...")
@@ -208,6 +210,10 @@ app = FastAPI(
     title=settings.app_title,
     version=settings.app_version,
     description=settings.app_description,
+    # 禁用openapi和redoc
+    # openapi_url=None,
+    # docs_url=None,
+    # redoc_url=None,
 )
 # app = FastAPI(root_path="/api/v1")
 
@@ -234,9 +240,9 @@ table_router = APIRouter(
 错误处理
 """
 
-# @app.exception_handler(ExpiredSignatureError)
-# async def validation_exception_handler(request, exc):
-#     return RedirectResponse(app.url_path_for('login'))
+@app.exception_handler(ExpiredSignatureError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse({'message':"令牌超时，请重新登陆", 'code': 50014}, status_code=200)  # 自定义状态码 50014 表示登陆超时
 
 """
 错误处理
@@ -254,7 +260,7 @@ def login(username: str = Body(), password: str = Body()):
         )
     else:
         access_token = user.create_access_token()
-        return {"token": access_token, "msg": '登陆成功'}
+        return {"token": access_token, "message": '登陆成功'}
 
 
 @user_router.post('/register')
@@ -264,7 +270,7 @@ def register(username: str, password: str):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {'msg': "注册成功"}
+    return {'message': "注册成功"}
 
 
 @user_router.post('/get_user_id')
@@ -291,7 +297,7 @@ def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     db.add(user)
     db.commit()
     db.refresh(user)
-    return {'msg': "修改成功,请重新登陆"}
+    return {'message': "修改成功,请重新登陆"}
 
 @table_router.get('/list')
 def table_list():
