@@ -9,7 +9,7 @@ import json
 import time
 import random
 from datetime import datetime
-from typing import Union
+from typing import Union, List
 from datetime import timedelta
 import logging
 
@@ -18,7 +18,7 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseSettings
+from pydantic import BaseSettings, validator
 
 from sqlalchemy import create_engine
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
@@ -40,31 +40,47 @@ logger = logging.getLogger("uvicorn.access")
 
 
 class Settings(BaseSettings):
-    app_title: str = "Awesome API"
-    app_description: str = "Awesome API description"
-    app_version: str = "0.0.1"
-    admin_email: str  # 需要从环境变量指定
-    items_per_user: int = 50
-    # 数据库链接
-    sqlalchemy_database_url: str = 'sqlite:///' + \
-        os.path.join(basedir, 'data.sqlite')
-    # sqlalchemy_database_url: str = "postgresql://user:password@postgresserver/db"
-    #
-    expire_minite: float = 10  # jwt超时时间
-    secret_algorithm: str = 'HS256'  # jwt 加密算法
-    # 加密密钥
-    secret_key: str = '123456'
-    # import secrets
-    # secret_key: str = secrets.token_hex()
+    APP_TITLE: str = "Awesome API"
+    APP_DESCRIPTION: str = "Awesome API description"
+    APP_VERSION: str = "0.0.1"
+    ADMIN_EMAIL: str  # 需要从环境变量指定
 
-    api_name: str = 'manage:app'
-    api_host: str = '0.0.0.0'
-    api_port: int = 8000
-    api_reload: int = 1
-    log_level: str = 'debug'
+    @validator('ADMIN_EMAIL')
+    def test_validator(cls, v):
+        return v
+
+    ITEMS_PER_USER: int = 50
+    # 数据库链接
+    SQLALCHEMY_DATABASE_URL: str = 'sqlite:///' + \
+        os.path.join(basedir, 'data.sqlite')
+    # SQLALCHEMY_DATABASE_URL: str = "postgresql://user:password@postgresserver/db"
+    #
+    EXPIRE_MINITE: float = 10  # jwt超时时间
+    SECRET_ALGORITHM: str = 'HS256'  # jwt 加密算法
+    # 加密密钥
+    SECRET_KEY: str = '123456'
+    # import secrets
+    # SECRET_KEY: str = secrets.token_hex()
+
+    # 这个要如何处理呢
+    # 接受 export CORS_ORIGINS='["example.com", "example2.com"]'
+    CORS_ORIGINS: List[str] = ['*']
+    CORS_METHODS: List[str] = ['*']
+    CORS_HEADERS: List[str] = ['*']
+
+    API_NAME: str = 'manage:app'
+    API_HOST: str = '0.0.0.0'
+    API_PORT: int = 8000
+    # 可以使用 export API_RELOAD=False
+    # a str which when converted to lower case is one of 
+    # '0', 'off', 'f', 'false', 'n', 'no', '1', 'on', 't', 'true', 'y', 'yes'
+    API_RELOAD: bool = True
+    LOG_LEVEL: str = 'debug'
 
     class Config:  # 可以使用.env覆盖本地文件
+        # env_prefix = 'my_prefix_'  # defaults to no prefix, i.e. ""
         env_file = ".env"
+        # case_sensitive = True # 大小写敏感
 
 
 settings = Settings()
@@ -83,7 +99,7 @@ settings = Settings()
 fake = Faker(locale="zh-CN")
 
 engine = create_engine(
-    settings.sqlalchemy_database_url, connect_args={"check_same_thread": False}
+    settings.SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -106,13 +122,13 @@ class User(Base):
     def verify_password(self, password):
         return custom_app_context.verify(password, self.password)
 
-    def create_access_token(self, data: dict = {}, expire_minite: Union[timedelta, None] = settings.expire_minite):
+    def create_access_token(self, data: dict = {}, EXPIRE_MINITE: Union[timedelta, None] = settings.EXPIRE_MINITE):
         to_encode = data.copy()
-        expire = time.time() + expire_minite * 60
+        expire = time.time() + EXPIRE_MINITE * 60
         to_encode.update({"exp": expire, "sub": str(self.id)}
                          )  # 加入用户名和超时时间  sub必须是字符串
         encoded_jwt = jwt.encode(
-            to_encode, settings.secret_key, algorithm=settings.secret_algorithm)
+            to_encode, settings.SECRET_KEY, algorithm=settings.SECRET_ALGORITHM)
         return encoded_jwt
 
     @classmethod
@@ -128,8 +144,8 @@ class User(Base):
             detail="Could not validate credentials"
         )
         try:
-            payload = jwt.decode(x_token, settings.secret_key,
-                                 algorithms=settings.secret_algorithm)
+            payload = jwt.decode(x_token, settings.SECRET_KEY,
+                                 algorithms=settings.SECRET_ALGORITHM)
             user_id: str = payload.get("sub")
             if user_id is None:
                 raise HTTPException(
@@ -205,9 +221,9 @@ def create_table():
 fastapi 相关
 """
 app = FastAPI(
-    title=settings.app_title,
-    version=settings.app_version,
-    description=settings.app_description,
+    title=settings.APP_TITLE,
+    version=settings.APP_VERSION,
+    description=settings.APP_DESCRIPTION,
     # 禁用openapi和redoc
     # openapi_url=None,
     # docs_url=None,
@@ -218,10 +234,10 @@ app = FastAPI(
 # '*' 是通配符，让本服务器所有的 URL 都允许跨域请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=settings.CORS_METHODS,
+    allow_headers=settings.CORS_HEADERS,
 )
 
 user_router = APIRouter(
@@ -286,7 +302,7 @@ def register(username: str, password: str):
 def get_user_id(user_id: str = Depends(User.get_user_id)):
     return user_id
 
-@user_router.get('/info')
+@user_router.get('/info',dependencies=[])
 def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
     return {
         'roles': ['admin'],
@@ -296,8 +312,8 @@ def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留
     }
 
 @user_router.post('/logout')
-def logout(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
-    return f"success {user_id}"
+def logout():  # 暂时不做角色,保留下来
+    return f"success"
 
 @user_router.post('/setpwd')
 def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
@@ -329,9 +345,9 @@ if __name__ == '__main__':
     create_table()
 
     uvicorn.run(
-        settings.api_name,   # 需要使用字符串模块名才能reload
-        host=settings.api_host,
-        port=settings.api_port,
-        log_level=settings.log_level,
-        reload=settings.api_reload,
+        settings.API_NAME,   # 需要使用字符串模块名才能reload
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+        LOG_LEVEL=settings.LOG_LEVEL,
+        reload=settings.API_RELOAD,
     )
