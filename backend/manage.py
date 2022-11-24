@@ -348,6 +348,6 @@ if __name__ == '__main__':
         settings.API_NAME,   # 需要使用字符串模块名才能reload
         host=settings.API_HOST,
         port=settings.API_PORT,
-        LOG_LEVEL=settings.LOG_LEVEL,
+        log_level=settings.LOG_LEVEL,
         reload=settings.API_RELOAD,
     )
