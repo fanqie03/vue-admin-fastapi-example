@@ -8,8 +8,9 @@ import re
 import json
 import time
 import random
+from enum import Enum, IntEnum
 from datetime import datetime
-from typing import Union, List
+from typing import Union, List, Dict, TypeVar, Generic, T
 from datetime import timedelta
 import logging
 
@@ -18,7 +19,8 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseSettings, validator
+from pydantic import BaseSettings, validator, BaseModel
+from pydantic.generics import GenericModel
 
 from sqlalchemy import create_engine
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
@@ -32,7 +34,7 @@ from faker import Faker
 
 
 basedir = os.path.abspath(os.path.dirname(__file__))
-logger = logging.getLogger("uvicorn.access")
+logger = logging
 
 """
 配置相关
@@ -261,20 +263,75 @@ async def startup_event():
     handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
     logger.addHandler(handler)
 
+
+
+"""
+schema
+"""
+
+DataT = TypeVar('DataT')
+
+
+
+class CodeEnum(IntEnum):
+    """
+    自定义状态码
+    20000 成功
+    50014 表示令牌超时，需要重新登陆
+    """
+    success = 20000  
+    token_expire = 50014
+
+
+class SingleResponse(GenericModel, Generic[DataT]):
+    code: CodeEnum = CodeEnum.success
+    message: str = ''
+    data: Union[DataT, None]
+
+
+class ListResponse(GenericModel, Generic[DataT]):
+    code: int = 20000
+    message: str = ''
+    page: int = 0
+    count: int = 0
+    data: List[DataT]
+
+
+
+
+class Token(BaseModel):
+    token: str
+
+
+class TableItem(BaseModel):
+    id: int
+    title: str 
+    status: str 
+    author: str 
+    display_time: datetime 
+    pageviews: int 
+    
+    class Config:
+        orm_mode = True
+
+"""
+schema
+"""
+
 """
 错误处理
 """
 
 @app.exception_handler(ExpiredSignatureError)
 async def validation_exception_handler(request, exc):
-    return JSONResponse({'message':"令牌超时，请重新登陆", 'code': 50014}, status_code=200)  # 自定义状态码 50014 表示登陆超时
+    return {'message':"令牌超时，请重新登陆", 'code': CodeEnum.token_expire}
 
 """
 错误处理
 """
 
 
-@user_router.post('/login')
+@user_router.post('/login', response_model=SingleResponse[Token])
 def login(username: str = Body(), password: str = Body()):
     user = User.login(username, password)
 
@@ -285,10 +342,11 @@ def login(username: str = Body(), password: str = Body()):
         )
     else:
         access_token = user.create_access_token()
-        return {"token": access_token, "message": '登陆成功'}
+        return {'data': {'token': access_token}, 'message': '登陆成功'}
 
 
-@user_router.post('/register')
+
+@user_router.post('/register', response_model=SingleResponse)
 def register(username: str, password: str):
     user = User(username=username)
     user.hash_password(password)
@@ -302,7 +360,7 @@ def register(username: str, password: str):
 def get_user_id(user_id: str = Depends(User.get_user_id)):
     return user_id
 
-@user_router.get('/info',dependencies=[])
+@user_router.get('/info')
 def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
     return {
         'roles': ['admin'],
@@ -311,9 +369,9 @@ def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留
         'name': 'Super Admin'
     }
 
-@user_router.post('/logout')
+@user_router.post('/logout', response_model=SingleResponse)
 def logout():  # 暂时不做角色,保留下来
-    return f"success"
+    return {}
 
 @user_router.post('/setpwd')
 def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
@@ -324,10 +382,10 @@ def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     db.refresh(user)
     return {'message': "修改成功,请重新登陆"}
 
-@table_router.get('/list')
+@table_router.get('/list', response_model=ListResponse[TableItem])
 def table_list():
     items = db.query(Article).all()
-    return {'items': items}
+    return {'data': items, 'count': len(items)}
 
 @app.get('/')
 def index():  # 将首页重定向到admin后台
