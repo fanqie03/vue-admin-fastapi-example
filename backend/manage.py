@@ -18,7 +18,7 @@ from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseSettings, validator
+from pydantic import BaseSettings, validator, BaseModel
 
 from sqlalchemy import create_engine
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
@@ -252,6 +252,9 @@ table_router = APIRouter(
 api_router = APIRouter(
     prefix='/api',
 )
+transaction_router = APIRouter(
+    prefix='/transaction'
+)
 
 @app.on_event("startup")
 async def startup_event():
@@ -285,7 +288,8 @@ def login(username: str = Body(), password: str = Body()):
         )
     else:
         access_token = user.create_access_token()
-        return {"token": access_token, "message": '登陆成功'}
+        # return {"data": {'token': access_token}, "message": '登陆成功', "code": 20000}
+        return {"token": access_token, "message": '登陆成功', "code": 20000}
 
 
 @user_router.post('/register')
@@ -302,14 +306,14 @@ def register(username: str, password: str):
 def get_user_id(user_id: str = Depends(User.get_user_id)):
     return user_id
 
-@user_router.get('/info',dependencies=[])
+@user_router.get('/info')
 def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
-    return {
+    return {'data': {
         'roles': ['admin'],
         'introduction': 'I am a super administrator',
         'avatar': 'https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif',
         'name': 'Super Admin'
-    }
+    }, 'code': 20000}
 
 @user_router.post('/logout')
 def logout():  # 暂时不做角色,保留下来
@@ -324,10 +328,40 @@ def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
     db.refresh(user)
     return {'message': "修改成功,请重新登陆"}
 
-@table_router.get('/list')
+class TableList(BaseModel):
+    code: int = 200
+
+
+    class Item(BaseModel):
+        id: int
+        title: str
+        status: str 
+        author: str 
+        display_time: datetime
+        pageviews: int
+
+        class Config:
+            orm_mode=True
+    items: List[Item]
+
+@table_router.get('/list', response_model=TableList)
 def table_list():
     items = db.query(Article).all()
     return {'items': items}
+
+@transaction_router.get('/list')
+def transaction_list():
+    items = []
+    total = 20
+    for i in range(total):
+        items.append({
+            'order_no': fake.uuid4(),
+            'timestamp': fake.date(),
+            'username': fake.name(),
+            'price': fake.unique.random_int(min=1, max=999),
+            'status': random.choice(['success', 'pending']),
+        })
+    return {'data': {'total': total, 'items': items}, 'code': 20000}
 
 @app.get('/')
 def index():  # 将首页重定向到admin后台
@@ -336,9 +370,44 @@ def index():  # 将首页重定向到admin后台
 
 app.mount("/admin", StaticFiles(directory="admin"), name="admin")
 
+
+
+class Item(BaseModel):
+    id: str
+    value: str
+
+
+class Message(BaseModel):
+    message: str
+
+
+
+@app.get(
+    "/items/{item_id}",
+    response_model=Item,
+    responses={
+        404: {"model": Message, "description": "The item was not found"},
+        200: {
+            "description": "Item requested by ID",
+            "content": {
+                "application/json": {
+                    "example": {"id": "bar", "value": "The bar tenders"}
+                }
+            },
+        },
+    },
+)
+async def read_item(item_id: str):
+    if item_id == "foo":
+        return {"id": "foo", "value": "there goes my hero"}
+    else:
+        return JSONResponse(status_code=404, content={"message": "Item not found"})
+
+
 # 需要在定义api后,进行调用才会加入到app中
 api_router.include_router(user_router)
 api_router.include_router(table_router)
+api_router.include_router(transaction_router)
 app.include_router(api_router)
 
 if __name__ == '__main__':
@@ -348,6 +417,6 @@ if __name__ == '__main__':
         settings.API_NAME,   # 需要使用字符串模块名才能reload
         host=settings.API_HOST,
         port=settings.API_PORT,
-        LOG_LEVEL=settings.LOG_LEVEL,
+        log_level=settings.LOG_LEVEL,
         reload=settings.API_RELOAD,
     )
