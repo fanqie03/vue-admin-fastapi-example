@@ -30,8 +30,7 @@ from jose import JWTError, jwt, ExpiredSignatureError
 import uvicorn
 
 from config import settings, logger, CodeEnum
-from models import User, get_session
-from crud import Auth
+from models2 import User, get_session, UserWithRoles, UserBase, create_by
 
 
 
@@ -154,6 +153,70 @@ async def validation_exception_handler(request, exc):
 错误处理
 """
 
+
+# @user_router.post('/login', response_model=SingleResponse[Token])
+# def login(username: str = Body(), password: str = Body()):
+#     user = User.login(username, password)
+
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="账号或密码错误"
+#         )
+#     else:
+#         access_token = user.create_access_token()
+#         return {'data': {'token': access_token}, 'message': '登陆成功'}
+
+
+
+# @user_router.post('/register', response_model=SingleResponse)
+# def register(username: str, password: str):
+#     user = User(username=username)
+#     user.hash_password(password)
+#     db.add(user)
+#     db.commit()
+#     db.refresh(user)
+#     return {'message': "注册成功"}
+
+
+# @user_router.post('/get_user_id')
+# def get_user_id(user_id: str = Depends(User.get_user_id)):
+#     return user_id
+
+# @user_router.get('/info')
+# def info(user_id: str = Depends(User.get_user_id)):  # 暂时不做角色,保留下来
+#     return {
+#         'roles': ['admin'],
+#         'introduction': 'I am a super administrator',
+#         'avatar': 'https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif',
+#         'name': 'Super Admin'
+#     }
+
+# @user_router.post('/logout', response_model=SingleResponse)
+# def logout():  # 暂时不做角色,保留下来
+#     return {}
+
+# @user_router.post('/setpwd')
+# def set_auth_pwd(new_password: str, user: str = Depends(User.get_user)):
+#     # 疑问,修改成功后如何让旧的jwt失效(用户重新登陆),再就是怎么实现强制登出
+#     user.hash_password(new_password)
+#     db.add(user)
+#     db.commit()
+#     db.refresh(user)
+#     return {'message': "修改成功,请重新登陆"}
+
+# @table_router.get('/list', response_model=ListResponse[TableItem])
+# def table_list():
+#     items = db.query(Article).all()
+#     return {'data': items, 'count': len(items)}
+
+# @app.get('/')
+# def index():  # 将首页重定向到admin后台
+#     return RedirectResponse('/admin/index.html')
+
+
+# app.mount("/admin", StaticFiles(directory="admin"), name="admin")
+
 """
 eladmin
 """
@@ -178,8 +241,8 @@ def auth_info():
 def auth_code():
     """获取验证码"""
 
-@auth_router.post('/login')
-def auth_login(user: User = Depends(Auth.login)):
+@auth_router.post('/login', response_model=UserWithRoles)
+def auth_login(session: Session = Depends(get_session), username: str = Body(), password: str = Body(), code: str = Body()):
     """
     username 用户名
     password 密码
@@ -189,24 +252,81 @@ def auth_login(user: User = Depends(Auth.login)):
     返回token
     ```json
     {
+        "user": {
+            "authorities": [
+                {
+                    "authority": "admin"
+                }
+            ],
+            "dataScopes": [],
+            "roles": [
+                "admin"
+            ],
+            "user": {
+                "avatarName": "avatar.jpeg",
+                "avatarPath": "/home/eladmin/avatar/avatar.jpeg",
+                "createTime": "2018-08-23 09:11:56",
+                "dept": {
+                    "id": 2,
+                    "name": "研发部"
+                },
+                "email": "admin@el-admin.vip",
+                "enabled": True,
+                "gender": "男",
+                "id": 1,
+                "isAdmin": True,
+                "jobs": [
+                    {
+                        "id": 11,
+                        "name": "全栈开发"
+                    }
+                ],
+                "nickName": "管理员",
+                "password": "$2a$10$Egp1/gvFlt7zhlXVfEFw4OfWQCGPw0ClmMcc6FjTnvXNRVf9zdMRa",
+                "phone": "18888888888",
+                "pwdResetTime": "2020-05-03 16:38:31",
+                "roles": [
+                    {
+                        "dataScope": "全部",
+                        "id": 1,
+                        "level": 1,
+                        "name": "超级管理员"
+                    }
+                ],
+                "updateBy": "admin",
+                "updateTime": "2020-09-05 10:43:31",
+                "username": "admin"
+            }
+        },
         "token": "Bearer eyJhbGciOiJIUzUxMiJ9.eyJqdGkiOiI0NmI0MjNkMDA1YjE0ZjJlOTc1YThlYTc3MWQ0ZmE3NCIsInVzZXIiOiJhZG1pbiIsInN1YiI6ImFkbWluIn0.0OQat62mTLi8U3h3m2yvjnlfE0VSDB8y0yZVwAeW5YueXBPe9kzDtjDLaOAcJzxDANLCfdjA0cm4K4v0fobbaQ"
     }
     ```
     """
+    # user = User()
+    # user.hash_password(password)
+    # logger.info(user.password)
+    user = User.login(session=session, username=username, password=password)
+    # logger.info(user.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="账号或密码错误"
         )
     else:
-        access_token = Auth.create_access_token(user)
-        return {'token': access_token}
+        access_token = user.create_access_token()
+        logger.info(user.roles)
+        logger.info(user.roles[0].users)
+        logger.info(user.roles[0].menus)
+        # return {'token': access_token, 'user': user}
+        user = create_by(user)
+
+        return user
 
 
 menus_router = APIRouter(prefix='/menus', tags=['menus'])
 
 @menus_router.get('/build')
-def menus_build():
+def auth_build():
     """获取菜单栏
     ```json
     [
