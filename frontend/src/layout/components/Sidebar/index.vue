@@ -31,6 +31,9 @@ export default {
       'sidebar'
     ]),
     routes() {
+      console.log(this.$router)
+      // options是创建 Router 时传递的原始配置对象。只读的
+      // 在 src/router/index.js 中的 createRouter
       return this.$router.options.routes
     },
     activeMenu() {

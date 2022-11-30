@@ -399,7 +399,7 @@ def logout():  # 暂时不做角色,保留下来
 #     db.refresh(user)
 #     return {'message': "修改成功,请重新登陆"}
 
-@table_router.get('/list', response_model=ListResponse[TableItem])
+@table_router.get('/list', response_model=ListResponse[Article])
 def table_list(*, session: Session = Depends(get_session), limit: int=Query(default=10, le=20), offset:int=Query(default=0)):
     items = session.exec(select(Article).limit(limit).offset(offset)).all()
     return {'data': items, 'count': len(items)}

@@ -34,7 +34,7 @@ export const constantRoutes = [
   {
     path: '/login',
     component: () => import('@/views/login/index'),
-    hidden: true
+    hidden: true  // 在登录后再navbar中进行隐藏
   },
 
   {
