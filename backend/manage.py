@@ -424,9 +424,10 @@ def logout():  # 暂时不做角色,保留下来
 #     return {'message': "修改成功,请重新登陆"}
 
 @article_router.get('/list')
-def article_list(*, session: Session = Depends(get_session), limit: int=Query(default=30, le=40), offset:int=Query(default=0)):
+def article_list(*, session: Session = Depends(get_session), limit: int=Query(default=30, le=40), page:int=Query(default=0)):
     # query = select(Article)
     # count = query.count()
+    offset = (page - 1) * limit
     query = select(Article)
     # 从这里看到如何获取数目 
     # https://github.com/uriyyo/fastapi-pagination/blob/6dbd8636f14f83cc2cc2ff592699181aeda2b11d/fastapi_pagination/ext/sqlmodel.py#L23
