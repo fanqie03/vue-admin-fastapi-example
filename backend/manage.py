@@ -424,11 +424,21 @@ def logout():  # 暂时不做角色,保留下来
 #     return {'message': "修改成功,请重新登陆"}
 
 @article_router.get('/list')
-def article_list(*, session: Session = Depends(get_session), limit: int=Query(default=30, le=40), page:int=Query(default=0)):
+def article_list(
+    *, 
+    session: Session = Depends(get_session), 
+    limit: int=Query(default=30, le=40), 
+    page:int=Query(default=0),
+    title: Optional[str]=Query(default=None)
+):
     # query = select(Article)
     # count = query.count()
     offset = (page - 1) * limit
     query = select(Article)
+    if title:
+        # query = query.where(title in Article.title)
+        # https://github.com/tiangolo/sqlmodel/issues/153#issuecomment-964994946
+        query = query.where(Article.title.like('%' + title + '%'))
     # 从这里看到如何获取数目 
     # https://github.com/uriyyo/fastapi-pagination/blob/6dbd8636f14f83cc2cc2ff592699181aeda2b11d/fastapi_pagination/ext/sqlmodel.py#L23
     total = session.scalar(select(func.count("*")).select_from(query.subquery()))
