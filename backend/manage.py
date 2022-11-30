@@ -23,7 +23,7 @@ from pydantic import BaseSettings, validator, BaseModel
 from pydantic.generics import GenericModel
 
 # from sqlalchemy import create_engine
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, func
 # from sqlalchemy.ext.declarative import declarative_base
 # from sqlalchemy.orm import sessionmaker
 
@@ -424,9 +424,18 @@ def logout():  # 暂时不做角色,保留下来
 #     return {'message': "修改成功,请重新登陆"}
 
 @article_router.get('/list')
-def article_list(*, session: Session = Depends(get_session), limit: int=Query(default=10, le=20), offset:int=Query(default=0)):
-    items = session.exec(select(Article).limit(limit).offset(offset)).all()
-    return success_response({'items': items, 'total': len(items)})
+def article_list(*, session: Session = Depends(get_session), limit: int=Query(default=30, le=40), offset:int=Query(default=0)):
+    # query = select(Article)
+    # count = query.count()
+    query = select(Article)
+    # 从这里看到如何获取数目 
+    # https://github.com/uriyyo/fastapi-pagination/blob/6dbd8636f14f83cc2cc2ff592699181aeda2b11d/fastapi_pagination/ext/sqlmodel.py#L23
+    total = session.scalar(select(func.count("*")).select_from(query.subquery()))
+
+    items = session.exec(query.limit(limit).offset(offset)).all()
+    # logger.info(count)
+    # count = items.count()
+    return success_response({'items': items, 'total': total})
 
 @article_router.post('/update')
 def article_update(*, session: Session = Depends(get_session), article: Article):

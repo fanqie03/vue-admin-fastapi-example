@@ -2,10 +2,10 @@
 
 import Layout from '@/layout'
 
-const sysRouter = {
-  path: '/table',
+const systemRouter = {
+  path: '/system',
   component: Layout,
-  redirect: '/table/complex-table',
+  redirect: '/system/user',
   name: 'sys',
   meta: {
     title: '系统管理',
@@ -25,17 +25,23 @@ const sysRouter = {
     //   meta: { title: 'Drag Table' }
     // },
     {
-      path: 'inline-edit-table',
+      path: 'user',
       component: () => import('@/views/table/inline-edit-table'),
       name: 'InlineTable',
       meta: { title: '用户管理', icon: 'user' }
     },
     {
-      path: 'complex-table',
+      path: 'role',
       component: () => import('@/views/table/complex-table'),
       name: 'ComplexTable',
-      meta: { title: '角色管理' }
+      meta: { title: '角色管理', icon: 'role' }
+    },
+    {
+      path: 'menu',
+      component: () => import('@/views/table/complex-table'),
+      name: 'ComplexTable',
+      meta: { title: '菜单管理', icon: 'menu' }
     }
   ]
 }
-export default sysRouter
+export default systemRouter

@@ -21,6 +21,9 @@ export function parseTime(time, cFormat) {
       if ((/^[0-9]+$/.test(time))) {
         // support "1548221490638"
         time = parseInt(time)
+      } else if (time.includes('T')) {
+        // like 2007-08-19T01:49:06 T是空格的意思，这里直接不处理
+        // continue
       } else {
         // support safari
         // https://stackoverflow.com/questions/4310953/invalid-date-in-safari
