@@ -127,11 +127,21 @@ class Article(SQLModel, table=True):
     __tablename__ = 'article'
     __table_args__ = {'extend_existing': True}
     id:int = Field(primary_key=True)
-    title:str
-    status:str
-    author:str
-    display_time:datetime
-    pageviews:int
+    timestamp: datetime
+    author:Optional[str]
+    reviewer:Optional[str]
+    title:Optional[str]
+    content_short:Optional[str]
+    content:Optional[str]
+    forecast:Optional[float]
+    importance:Optional[int]
+    type:str
+    status: str
+    display_time:Optional[datetime]
+    comment_disabled:bool = Field(default=True)
+    pageviews:Optional[int]
+    image_uri: Optional[str]
+    # platforms: List[str]
 
 def create_table():
     logger.info("重置数据库 ...")
@@ -146,16 +156,26 @@ def create_table():
             user.password = Auth.hash_password(password)
             session.add(user)
         session.commit()
-        logger.info(f"创建随机文章 {10} ...")
+        logger.info(f"创建随机文章 {100} ...")
         items = []
-        for i in range(10):
+        for i in range(100):
             items.append({
             'id': fake.unique.random_int(min=1, max=999),  # 随机且唯一
-            'title': fake.text(),
-            'status': random.choice(['published', 'draft', 'deleted']),
+            'timestamp': fake.date_time(),
             'author': fake.name(),
+            'reviewer': fake.name(),
+            'title': fake.text()[:10],
+            'content_short': fake.text()[:30],
+            'content': fake.text(),
+            'forecast': fake.random_int(min=0, max=100),
+            'importance': fake.random_int(min=1, max=3),
+            'type': random.choice(['CN', 'US', 'JP', 'EU']),
+            'status': random.choice(['published', 'draft']),
             'display_time': fake.date_time(),
-            'pageviews': fake.random_int(min=300, max=5000)
+            'comment_disabled': True,
+            'pageviews': fake.random_int(min=300, max=5000),
+            'image_url': '',
+            # 'platforms': ['a-platform'],
         })
         articles = [Article(**x) for x in items]
         session.add_all(articles)
@@ -268,8 +288,8 @@ user_router = APIRouter(
     tags=['user'],
     # dependencies=[Depends(get_token_header)],  # 可以让每个api都会需要经过这个检查
 )
-table_router = APIRouter(
-    prefix='/table',
+article_router = APIRouter(
+    prefix='/article',
     tags=['table'],
 )
 api_router = APIRouter(
@@ -350,6 +370,9 @@ async def validation_exception_handler(request, exc):
 """
 
 
+def success_response(data=None, message='成功', code=20000):
+    return dict(data=data, message=message, code=code)
+
 @user_router.post('/login')
 def login(user: Optional[User] = Depends(Auth.login)):
     if not user:
@@ -359,7 +382,8 @@ def login(user: Optional[User] = Depends(Auth.login)):
         )
     else:
         access_token = Auth.create_access_token(user)
-        return {'data': {'token': access_token}, 'message': '登陆成功'}
+        # return dict(token=access_token, message='成功', code=20000)
+        return success_response({'token': access_token})
 
 
 
@@ -379,12 +403,12 @@ def get_user_id(user_id: str = Depends(Auth.get_user_id)):
 
 @user_router.get('/info')
 def info(user_id: str = Depends(Auth.get_user_id)):  # 暂时不做角色,保留下来
-    return {
+    return success_response({
         'roles': ['admin'],
         'introduction': 'I am a super administrator',
         'avatar': 'https://wpimg.wallstcn.com/f778738c-e4f8-4870-b634-56703b4acafe.gif',
         'name': 'Super Admin'
-    }
+    })
 
 @user_router.post('/logout', response_model=SingleResponse)
 def logout():  # 暂时不做角色,保留下来
@@ -399,10 +423,47 @@ def logout():  # 暂时不做角色,保留下来
 #     db.refresh(user)
 #     return {'message': "修改成功,请重新登陆"}
 
-@table_router.get('/list', response_model=ListResponse[Article])
-def table_list(*, session: Session = Depends(get_session), limit: int=Query(default=10, le=20), offset:int=Query(default=0)):
+@article_router.get('/list')
+def article_list(*, session: Session = Depends(get_session), limit: int=Query(default=10, le=20), offset:int=Query(default=0)):
     items = session.exec(select(Article).limit(limit).offset(offset)).all()
-    return {'data': items, 'count': len(items)}
+    return success_response({'items': items, 'total': len(items)})
+
+@article_router.post('/update')
+def article_update(*, session: Session = Depends(get_session), article: Article):
+    db_article = session.get(Article, article.id)
+    article_data = article.dict(exclude_unset=True)
+    for key, value in article_data.items():
+        setattr(db_article, key, value)
+    session.add(db_article)
+    session.commit()
+    return success_response('success')
+
+
+@article_router.post('/status')
+def article_status(*, session: Session = Depends(get_session), id:int = Body(), status:str = Body()):
+    db_article = session.get(Article, id)
+    db_article.status = status
+    session.add(db_article)
+    session.commit()
+    return success_response('success')
+
+@article_router.delete('/{id}')
+def article_delete(*, session: Session = Depends(get_session), id:int):
+    db_article = session.get(Article, id)
+    session.delete(db_article)
+    session.commit()
+    return success_response('success')
+
+
+@article_router.post('/create')
+def article_create(*, session: Session = Depends(get_session), article: Article):
+    # db_article = session.get(Article, article.id)
+    # article_data = article.dict(exclude_unset=True)
+    # for key, value in article_data.items():
+    #     setattr(db_article, key, value)
+    session.add(article)
+    session.commit()
+    return success_response('success')
 
 @app.get('/')
 def index():  # 将首页重定向到admin后台
@@ -411,9 +472,24 @@ def index():  # 将首页重定向到admin后台
 
 app.mount("/admin", StaticFiles(directory="admin"), name="admin")
 
+# 首页示例数据
+@api_router.get('/transaction/list')
+def transaction_list():
+    arr = []
+    total = 10
+    for i in range(total):
+        arr.append({
+            'order_no': fake.uuid4(),
+            'timestamp': fake.date(),
+            'username': fake.name(),
+            'price': fake.random_int(),
+            'status': random.choice(['success','pedding'])
+        })
+    return success_response({'items': arr, 'total': total})
+
 # 需要在定义api后,进行调用才会加入到app中
 api_router.include_router(user_router)
-api_router.include_router(table_router)
+api_router.include_router(article_router)
 app.include_router(api_router)
 
 if __name__ == '__main__':
